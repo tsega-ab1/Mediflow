@@ -1,0 +1,33 @@
+# `docker compose up -d db` for local development (API/web run with npm).
+# `docker compose up --build` runs the whole stack: http://localhost:3000
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mediflow
+      POSTGRES_PASSWORD: mediflow
+      POSTGRES_DB: mediflow
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://mediflow:mediflow@db:5432/mediflow
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-real-deployments}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["4000:4000"]
+  web:
+    build: ./web
+    environment:
+      API_URL: http://api:4000
+    depends_on: [api]
+    ports: ["3000:3000"]
+volumes:
+  pgdata:
