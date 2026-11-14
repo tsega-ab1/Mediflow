@@ -11,7 +11,7 @@
     "start": "node src/server.js",
     "migrate": "node-pg-migrate -m migrations --migration-file-language js",
     "test": "vitest run",
-    "seed": "node scripts/seed.js"
+    "seed": "node --env-file=.env scripts/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
