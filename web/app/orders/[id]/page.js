@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Shell, { Notice, Status, useSession } from '../../../components/Shell';
 import OrderActions from '../../../components/OrderActions';
 import { api, day, when } from '../../../lib/api';
@@ -43,6 +44,7 @@ function Detail({ id }) {
   );
 }
 
-export default function OrderPage({ params }) {
-  return <Shell roles={['customer', 'warehouse', 'admin']}><Detail id={params.id} /></Shell>;
+export default function OrderPage() {
+  const { id } = useParams();
+  return <Shell roles={['customer', 'warehouse', 'admin']}><Detail id={id} /></Shell>;
 }
