@@ -21,5 +21,11 @@ button.ghost { background:transparent; color:var(--ink); border-color:var(--line
 .badge.confirmed,.badge.placed { background:#e0f2fe; color:#075985; } .badge.packed { background:#fef3c7; color:#92400e; } .badge.shipped { background:#ede9fe; color:#5b21b6; }
 .badge.delivered,.badge.active { background:#dcfce7; color:#166534; } .badge.cancelled,.badge.recalled { background:#fee2e2; color:#991b1b; } .badge.quarantined { background:#ffedd5; color:#9a3412; }
 .tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1rem; } .tabs button { background:#fff; color:var(--ink); border-color:var(--line); } .tabs button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+.count { margin-left:.3rem; padding:0 .45rem; border-radius:999px; background:var(--danger); color:#fff; font-size:.75rem; }
+.badge.issued { background:#e0f2fe; color:#075985; } .badge.paid { background:#dcfce7; color:#166534; } .badge.overdue { background:#fee2e2; color:#991b1b; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.8rem; margin-bottom:1rem; }
+.stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.8rem 1rem; } .stat b { display:block; font-size:1.4rem; }
+.unread { font-weight:600; } .right { text-align:right; } .invoice { max-width:720px; }
+@media print { .bar, .actions, .noprint { display:none !important; } body { background:#fff; } .card { border:0; } }
 .login { max-width:360px; margin:12vh auto; } .login input { width:100%; margin:.3rem 0 .8rem; }
 .timeline { list-style:none; padding:0; margin:0; } .timeline li { padding:.3rem 0; border-bottom:1px dashed var(--line); }

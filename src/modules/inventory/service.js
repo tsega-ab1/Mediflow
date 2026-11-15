@@ -76,7 +76,7 @@ export async function setBatchStatus(actor, id, status) {
     return { batch: updated, affectedOrderIds: status === 'active' ? [] : rows.map((r) => r.order_id), from: batch.status };
   });
   if (status === 'recalled' && result.from !== 'recalled') {
-    events.emit('BatchRecalled', { batchId: id, affectedOrderIds: result.affectedOrderIds });
+    events.emit('BatchRecalled', { batchId: id, batchNumber: result.batch.batch_number, productId: result.batch.product_id, affectedOrderIds: result.affectedOrderIds });
   }
   return { ...result.batch, affected_order_ids: result.affectedOrderIds };
 }
@@ -153,5 +153,28 @@ export async function batchesForOrder(orderId) {
             b.id AS batch_id, b.batch_number, b.expiry_date, b.status AS batch_status
      FROM inventory.reservations r JOIN inventory.batches b ON b.id = r.batch_id
      WHERE r.order_id = $1 ORDER BY b.expiry_date, b.id`, [orderId]);
+  return rows;
+}
+
+// ---- Read models for reporting ----
+
+// Per product: total on hand, reserved, and 'sellable' (what new orders can actually get).
+export async function stockSummary() {
+  const { rows } = await query(
+    `SELECT product_id,
+            COALESCE(sum(on_hand),0)::int AS on_hand,
+            COALESCE(sum(reserved),0)::int AS reserved,
+            COALESCE(sum(on_hand - reserved) FILTER (
+              WHERE status = 'active' AND expiry_date > CURRENT_DATE + $1::int),0)::int AS sellable
+     FROM inventory.batches GROUP BY product_id`, [config.nearExpiryDays]);
+  return rows;
+}
+
+export async function expiringBatches(days) {
+  const { rows } = await query(
+    `SELECT id, product_id, batch_number, expiry_date, on_hand, reserved, status
+     FROM inventory.batches
+     WHERE status = 'active' AND on_hand > 0 AND expiry_date <= CURRENT_DATE + $1::int
+     ORDER BY expiry_date, id`, [days]);
   return rows;
 }

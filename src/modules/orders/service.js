@@ -46,8 +46,8 @@ export async function createOrder(user, rawItems) {
       await addEvent(c, order.id, null, 'placed', user.id);
       for (const it of items) {
         const { rows: [row] } = await c.query(
-          `INSERT INTO orders.order_items (order_id, product_id, quantity) VALUES ($1,$2,$3) RETURNING id`,
-          [order.id, it.product_id, it.quantity]);
+          `INSERT INTO orders.order_items (order_id, product_id, quantity, unit_price_cents) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [order.id, it.product_id, it.quantity, byId.get(it.product_id).price_cents]);
         await reserveStock(c, { orderId: order.id, orderItemId: row.id, productId: it.product_id, quantity: it.quantity, actorId: user.id });
       }
       await c.query(`UPDATE orders.orders SET status = 'confirmed', updated_at = now() WHERE id = $1`, [order.id]);
@@ -69,20 +69,24 @@ export async function createOrder(user, rawItems) {
 async function hydrate(user, orders) {
   if (!orders.length) return [];
   const { rows: items } = await query(
-    'SELECT order_id, product_id, quantity FROM orders.order_items WHERE order_id = ANY($1) ORDER BY order_id, product_id',
+    'SELECT order_id, product_id, quantity, unit_price_cents FROM orders.order_items WHERE order_id = ANY($1) ORDER BY order_id, product_id',
     [orders.map((o) => o.id)]);
   const products = new Map((await getProducts([...new Set(items.map((i) => i.product_id))])).map((p) => [p.id, p]));
   const customers = isStaff(user.role)
     ? new Map((await getCustomers([...new Set(orders.map((o) => o.customer_id))])).map((c) => [c.id, c.name]))
     : new Map();
-  return orders.map((o) => ({
-    ...o,
-    ...(isStaff(user.role) ? { customer_name: customers.get(o.customer_id) ?? null } : {}),
-    items: items.filter((i) => i.order_id === o.id).map((i) => ({
-      product_id: i.product_id, quantity: i.quantity,
+  return orders.map((o) => {
+    const own = items.filter((i) => i.order_id === o.id).map((i) => ({
+      product_id: i.product_id, quantity: i.quantity, unit_price_cents: i.unit_price_cents,
       name: products.get(i.product_id)?.name, sku: products.get(i.product_id)?.sku,
-    })),
-  }));
+    }));
+    return {
+      ...o,
+      ...(isStaff(user.role) ? { customer_name: customers.get(o.customer_id) ?? null } : {}),
+      items: own,
+      total_cents: own.reduce((s, i) => s + i.quantity * i.unit_price_cents, 0),
+    };
+  });
 }
 
 // Customers only ever see their own orders; anything else looks like "not found".
@@ -117,27 +121,61 @@ async function lockOrder(c, user, id) {
 
 export async function advanceOrder(user, id, to) {
   if (!STATUSES.includes(to) || to === 'cancelled') throw badRequest('status must be packed, shipped or delivered');
+  let customerId;
   await withTransaction(async (c) => {
     const order = await lockOrder(c, user, id);
+    customerId = order.customer_id;
     if (!canAdvance(order.status, to)) throw conflict(`Invalid status change: ${order.status} -> ${to}`);
     if (to === 'shipped') await shipReservations(c, { orderId: id, actorId: user.id });
     await c.query('UPDATE orders.orders SET status = $2, updated_at = now() WHERE id = $1', [id, to]);
     await addEvent(c, id, order.status, to, user.id);
     await record(c, { actorId: user.id, action: `order.${to}`, entity: 'order', entityId: id, details: { from: order.status } });
   });
-  events.emit('OrderStatusChanged', { orderId: id, status: to });
+  events.emit('OrderStatusChanged', { orderId: id, customerId, status: to });
   return getOrder(user, id);
 }
 
 export async function cancelOrder(user, id) {
+  let customerId;
   await withTransaction(async (c) => {
     const order = await lockOrder(c, user, id);
+    customerId = order.customer_id;
     if (!canCancel(user.role, order.status)) throw conflict(`An order that is ${order.status} cannot be cancelled by you`);
     await releaseReservations(c, { orderId: id, actorId: user.id });
     await c.query(`UPDATE orders.orders SET status = 'cancelled', updated_at = now() WHERE id = $1`, [id]);
     await addEvent(c, id, order.status, 'cancelled', user.id);
     await record(c, { actorId: user.id, action: 'order.cancelled', entity: 'order', entityId: id, details: { from: order.status } });
   });
-  events.emit('OrderStatusChanged', { orderId: id, status: 'cancelled' });
+  events.emit('OrderStatusChanged', { orderId: id, customerId, status: 'cancelled' });
   return getOrder(user, id);
+}
+
+// ---- Interfaces for the billing and reporting modules ----
+
+export async function getOrderForBilling(orderId) {
+  const { rows: [order] } = await query('SELECT id, customer_id, status FROM orders.orders WHERE id = $1', [orderId]);
+  if (!order) return null;
+  const { rows: items } = await query(
+    'SELECT product_id, quantity, unit_price_cents FROM orders.order_items WHERE order_id = $1 ORDER BY product_id', [orderId]);
+  const products = new Map((await getProducts(items.map((i) => i.product_id))).map((p) => [p.id, p]));
+  return {
+    ...order,
+    items: items.map((i) => ({ ...i, name: products.get(i.product_id)?.name ?? 'Product', sku: products.get(i.product_id)?.sku })),
+  };
+}
+
+export async function orderStats() {
+  const { rows } = await query('SELECT status, count(*)::int AS n FROM orders.orders GROUP BY status');
+  const { rows: [recent] } = await query(
+    `SELECT count(*)::int AS n FROM orders.orders WHERE created_at > now() - interval '30 days'`);
+  return { by_status: Object.fromEntries(rows.map((r) => [r.status, r.n])), placed_last_30_days: recent.n };
+}
+
+export async function topProducts({ days = 30, limit = 5 } = {}) {
+  const { rows } = await query(
+    `SELECT i.product_id, sum(i.quantity)::int AS quantity
+     FROM orders.order_items i JOIN orders.orders o ON o.id = i.order_id
+     WHERE o.status <> 'cancelled' AND o.created_at > now() - ($1::int * interval '1 day')
+     GROUP BY i.product_id ORDER BY quantity DESC, i.product_id LIMIT $2`, [days, limit]);
+  return rows;
 }

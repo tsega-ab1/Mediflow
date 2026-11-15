@@ -22,6 +22,14 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
+export async function downloadFile(path, filename) {
+  const res = await fetch(`/api${path}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
 export const money = (cents) => (cents / 100).toFixed(2);
 export const day = (d) => String(d).slice(0, 10);
 export const when = (d) => new Date(d).toLocaleString();

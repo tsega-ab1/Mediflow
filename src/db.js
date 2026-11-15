@@ -1,5 +1,8 @@
 import pg from 'pg';
 
+// bigint (money totals) comes back as a JS number; amounts stay far below 2^53.
+pg.types.setTypeParser(20, (v) => Number(v));
+
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 20 });
 export const query = (text, params) => pool.query(text, params);
 

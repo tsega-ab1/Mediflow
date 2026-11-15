@@ -28,6 +28,16 @@ export async function getCustomers(ids) {
   return rows;
 }
 
+export async function getUserIdsByRole(roles) {
+  const { rows } = await query('SELECT id FROM identity.users WHERE role = ANY($1)', [roles]);
+  return rows.map((r) => r.id);
+}
+
+export async function getUserIdsForCustomer(customerId) {
+  const { rows } = await query('SELECT id FROM identity.users WHERE customer_id = $1', [customerId]);
+  return rows.map((r) => r.id);
+}
+
 export async function createUser(actor, { email, password, role, customer_id } = {}) {
   const errors = [];
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) errors.push('a valid email is required');

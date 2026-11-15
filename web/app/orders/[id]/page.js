@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Shell, { Notice, Status, useSession } from '../../../components/Shell';
 import OrderActions from '../../../components/OrderActions';
-import { api, day, when } from '../../../lib/api';
+import { api, day, money, when } from '../../../lib/api';
 
 function Detail({ id }) {
   const user = useSession();
@@ -21,8 +21,11 @@ function Detail({ id }) {
       <OrderActions order={order} user={user} onDone={load} />
       <h2>Items</h2>
       <table>
-        <thead><tr><th>Product</th><th>SKU</th><th>Quantity</th></tr></thead>
-        <tbody>{order.items.map((i) => <tr key={i.product_id}><td>{i.name}</td><td>{i.sku}</td><td>{i.quantity}</td></tr>)}</tbody>
+        <thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Unit price</th><th className="right">Total</th></tr></thead>
+        <tbody>
+          {order.items.map((i) => <tr key={i.product_id}><td>{i.name}</td><td>{i.sku}</td><td>{i.quantity}</td><td>{money(i.unit_price_cents)}</td><td className="right">{money(i.quantity * i.unit_price_cents)}</td></tr>)}
+          <tr><td colSpan="4"><strong>Order total</strong></td><td className="right"><strong>{money(order.total_cents)}</strong></td></tr>
+        </tbody>
       </table>
       {order.batches && (
         <>

@@ -12,6 +12,7 @@ export default function Shop() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api('/catalog/products').then(setProducts).catch((e) => setError(e.message)); }, []);
+  const total = products.reduce((s, p) => s + (qty[p.id] > 0 ? qty[p.id] * p.price_cents : 0), 0);
   const items = Object.entries(qty).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }));
 
   async function place() {
@@ -40,7 +41,7 @@ export default function Shop() {
       </div>
       <Notice error={error} />
       <div className="actions">
-        <button disabled={!items.length || busy} onClick={place}>Place order ({items.length} item{items.length === 1 ? '' : 's'})</button>
+        <button disabled={!items.length || busy} onClick={place}>Place order ({items.length} item{items.length === 1 ? '' : 's'}) · {money(total)}</button>
       </div>
     </Shell>
   );

@@ -1,12 +1,17 @@
 import express from 'express';
 import { AppError } from './errors.js';
 import { auditRouter } from './modules/audit/index.js';
+import { billingRouter, registerBillingHandlers } from './modules/billing/index.js';
 import { catalogRouter } from './modules/catalog/index.js';
 import { authRouter, authenticate, identityRouter } from './modules/identity/index.js';
 import { inventoryRouter } from './modules/inventory/index.js';
+import { notificationsRouter, registerNotificationHandlers } from './modules/notifications/index.js';
 import { ordersRouter } from './modules/orders/index.js';
+import { reportingRouter } from './modules/reporting/index.js';
 
 export function createApp() {
+  registerBillingHandlers();
+  registerNotificationHandlers();
   const app = express();
   app.use(express.json());
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -17,6 +22,9 @@ export function createApp() {
   app.use('/catalog', catalogRouter);
   app.use('/inventory', inventoryRouter);
   app.use('/orders', ordersRouter);
+  app.use('/billing', billingRouter);
+  app.use('/notifications', notificationsRouter);
+  app.use('/reports', reportingRouter);
   app.use('/audit', auditRouter);
 
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
